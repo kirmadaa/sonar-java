@@ -1,56 +1,37 @@
-name: dogfood merge
-# This workflow is triggered on pushes to master and dogfood branches
+name: SonarCloud
 on:
   push:
     branches:
       - master
-      - 'dogfood/**'
-# commenting 'delete' action, as it is triggered way too often
-#  delete:
-#    branches:
-#      - 'dogfood/**'
-
-env:
-  SLACK_CHANNEL: team-lang-java-notifs
-  SLACK_USERNAME: Dogfood build action
-
+  pull_request:
+    types: [opened, synchronize, reopened]
 jobs:
-  dogfood_merge:
+  build:
+    name: Build and analyze
     runs-on: ubuntu-latest
-    name: Update dogfood branch
-    permissions:
-      id-token: write # required for SonarSource/vault-action-wrapper
     steps:
-    - name: get secrets
-      id: secrets
-      uses: SonarSource/vault-action-wrapper@d1c1ab4ca5ad07fd9cdfe1eff038a39673dfca64  # tag=2.4.2-1
-      with:
-        secrets: |
-          development/kv/data/slack webhook | SLACK_WEBHOOK;
-          development/github/token/{REPO_OWNER_NAME_DASH}-dogfood-merge token | dogfood_token;
-    - name: git octopus step
-      env:
-        GITHUB_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).dogfood_token }}
-      id: dogfood
-      uses: SonarSource/gh-action_dogfood_merge@v1
-      with:
-        dogfood-branch: 'dogfood-on-peach'
-    # Use the output from the `dogfood` step
-    - name: Get the name of the dogfood branch and its HEAD SHA1
-      run: echo "The dogfood branch was `${{ steps.dogfood.outputs.dogfood-branch }}` and its HEAD SHA1 was `${{ steps.dogfood.outputs.sha1 }}`"
-    #slack notifications
-    - name: Notify success on Slack
-      uses: Ilshidur/action-slack@1.6.2
-      env:
-        SLACK_WEBHOOK: ${{ fromJSON(steps.secrets.outputs.vault).SLACK_WEBHOOK }}
-        SLACK_OVERRIDE_MESSAGE: 'Dogfood build for `${{ steps.dogfood.outputs.sha1 }}`: *successful*'
-      with:
-        args: 'Succeed to build dogfood branch'
-    - name: Notify failures on Slack
-      uses: Ilshidur/action-slack@1.6.2
-      if: failure()
-      env:
-        SLACK_WEBHOOK: ${{ fromJSON(steps.secrets.outputs.vault).SLACK_WEBHOOK }}
-        SLACK_OVERRIDE_MESSAGE: 'Dogfood build for `${{ steps.dogfood.outputs.sha1 }}`: *failed*, see the logs at https://github.com/SonarSource/sonar-java/actions'
-      with:
-        args: 'Fail to build dogfood branch'
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: 17
+          distribution: 'zulu' # Alternative distribution options are available.
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+      - name: Build and analyze
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=kirmadaa_sonar-java
