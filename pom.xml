@@ -78,12 +78,10 @@
     <system>Cirrus CI</system>
     <url>https://cirrus-ci.com/github/SonarSource/sonar-java</url>
   </ciManagement>
+
   <properties>
     <sonar.organization>kirmadaa</sonar.organization>
     <sonar.host.url>https://sonarcloud.io</sonar.host.url>
-  </properties>
-
-  <properties>
     <license.title>SonarQube Java</license.title>
 
     <jdk.min.version>17</jdk.min.version>
